@@ -6,23 +6,15 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using ShoppingCartList.Models;
+using System.Dynamic;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Azure.Documents.Client;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Azure.Functions.Extensions.DependencyInjection;
-using System;
-using System.Runtime.CompilerServices;
-
-
-
 namespace ShoppingCartList
 {
     public class ShoppingCartApi
     {
-    private const string DatabaseName = "ShoppingCartItems";
-    private const string CollectionName = "Items";
+        private const string DatabaseName = "ShoppingCartItems";
+        private const string CollectionName = "Items";
         private readonly CosmosClient _cosmosClient;
         private Container documentContainer;
        
@@ -42,45 +34,47 @@ namespace ShoppingCartList
                System.Collections.Generic.IEnumerable<ShoppingCartItem> shp,
         ILogger log)
     {
+        
         log.LogInformation("Getting list of all employees ");
-        return new OkObjectResult(shp);
+        string gmessage="Retrieved all items successfully";
+        dynamic gmydata = new ExpandoObject();
+        gmydata.message = gmessage;
+        gmydata.Data=shp;
+        string json = Newtonsoft.Json.JsonConvert.SerializeObject(gmydata);
+
+        return new OkObjectResult(json);
     }
 
 
     [FunctionName("GetShoppingCartItemById")]
         public async Task<IActionResult> GetShoppingCartItemById(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "shoppingcartitem/{id}/{category}")]
-
-            //[CosmosDB(
-             //   DatabaseName,
-              //  CollectionName,
-              //  Connection ="CosmosDBConnectionString",
-               // Id = "{id}",
-               // PartitionKey = "{category}")]ShoppingCartItem shoppingCartItem,
-
-            HttpRequest req, ILogger log, string id,string category)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "getshoppingcartitembyid/{id}/{category}")]
+             HttpRequest req, ILogger log,string id,string category)
+                   
         {
             log.LogInformation($"Getting Shopping Cart Item with ID: {id}");
-
             try
             {
                 var item = await documentContainer.ReadItemAsync<ShoppingCartItem>(id, new Microsoft.Azure.Cosmos.PartitionKey(category));
-                return new OkObjectResult(item.Resource);
+                string getmessage="Retrived  an item successfully by Id";
+                dynamic gmydata = new ExpandoObject();
+                gmydata.message = getmessage;
+                gmydata.Data=item.Resource;
+                string json = Newtonsoft.Json.JsonConvert.SerializeObject(gmydata);
+                return new OkObjectResult(json);
             }
             catch (CosmosException e) when (e.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                return new NotFoundResult();
+                string responseMessage="Invalid input params,Please check";
+                return new NotFoundObjectResult(responseMessage);
             }
         }
+        
 
-        [FunctionName("CreateShoppingCartItem")]
+    [FunctionName("CreateShoppingCartItem")]
         public async Task<IActionResult> CreateShoppingCartItems(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "createshoppingcartitem")] HttpRequest req,
-           // [CosmosDB(
-            //DatabaseName,
-            //CollectionName,
-            //Connection ="CosmosDBConnectionString")] IAsyncCollector<ShoppingCartItem> shoppingCartItemsOut,
-            ILogger log)
+           ILogger log)
         {
             log.LogInformation("Creating Shopping Cart Item");
             string requestData = await new StreamReader(req.Body).ReadToEndAsync();
@@ -93,14 +87,16 @@ namespace ShoppingCartList
             };
 
             await documentContainer.CreateItemAsync(item, new Microsoft.Azure.Cosmos.PartitionKey(item.Category));
-
-            ////await shoppingCartItemsOut.AddAsync(item);
-
-            return new OkObjectResult(item);
+            string responsemessage="Created an item successfully";
+            dynamic cmydata = new ExpandoObject();
+            cmydata.message = responsemessage;
+            cmydata.Data=item;
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(cmydata);
+            return new OkObjectResult(json);
         }
 
-        [FunctionName("PutShoppingCartItem")]
-        public async Task<IActionResult> PutShoppingCartItem(
+        [FunctionName("UpdateShoppingCartItem")]
+        public async Task<IActionResult> UpdateShoppingCartItems(
             [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "updateshoppingcartitem/{id}/{category}")] HttpRequest req,
             ILogger log, string id,string category)
         {
@@ -108,30 +104,34 @@ namespace ShoppingCartList
 
             string requestData = await new StreamReader(req.Body).ReadToEndAsync();
             var data = JsonConvert.DeserializeObject<UpdateShoppingCartItem>(requestData);
-
             var item = await documentContainer.ReadItemAsync<ShoppingCartItem>(id, new Microsoft.Azure.Cosmos.PartitionKey(category));
 
             if (item.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                return new NotFoundResult();
+                string responseMessage="There is no item with the mentioned id";
+                return new NotFoundObjectResult(responseMessage);
             }
 
             item.Resource.Collected = data.Collected;
-
             await documentContainer.UpsertItemAsync(item.Resource);
-
-            return new OkObjectResult(item.Resource);
+            string updatemessage="Updated successfully";
+            dynamic upmydata = new ExpandoObject();
+            upmydata.message = updatemessage;
+            upmydata.Data=item.Resource;
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(upmydata);
+            return new OkObjectResult(json);
         }
 
         [FunctionName("DeleteShoppingCartItem")]
-        public async Task<IActionResult> DeleteShoppingCartItem(
+        public async Task<IActionResult> DeleteShoppingCartItems(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "delshoppingcartitem/{id}/{category}")] HttpRequest req,
             ILogger log, string id,string category)
         {
             log.LogInformation($"Deleting Shopping Cart Item with ID: {id}");
 
             await documentContainer.DeleteItemAsync<ShoppingCartItem>(id, new Microsoft.Azure.Cosmos.PartitionKey(category));
-            return new OkResult();
+            string responseMessage="Deleted sucessfully";         
+            return new OkObjectResult(responseMessage);
         }
     }
 }
