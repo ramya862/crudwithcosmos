@@ -1,3 +1,5 @@
+using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
@@ -6,9 +8,11 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using ShoppingCartList.Models;
+using System.ComponentModel.DataAnnotations;
 using System.Dynamic;
 using System.IO;
 using System.Threading.Tasks;
+
 namespace ShoppingCartList
 {
     public class ShoppingCartApi
@@ -71,41 +75,49 @@ namespace ShoppingCartList
         }
         
 
-    [FunctionName("CreateShoppingCartItem")]
-        public async Task<IActionResult> CreateShoppingCartItems(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "createshoppingcartitem")] HttpRequest req,
-           ILogger log)
-        {
-            log.LogInformation("Creating Shopping Cart Item");
-            string requestData = await new StreamReader(req.Body).ReadToEndAsync();
-            var data = JsonConvert.DeserializeObject<CreateShoppingCartItem>(requestData);
+[FunctionName("CreateShoppingCartItem")]
+public async Task<IActionResult> CreateShoppingCartItems(
+    [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "createshoppingcartitem")] HttpRequest req,
+   ILogger log)
+{
+    log.LogInformation("Creating Shopping Cart Item");
+    string requestData = await new StreamReader(req.Body).ReadToEndAsync();
+    var data = JsonConvert.DeserializeObject<ShoppingCartItem>(requestData);
 
-            var item = new ShoppingCartItem
-            {
-                ItemName = data.ItemName,
-                 Category = data.Category
-            };
+    var validator = new CreateShoppingCartItemValidator();
+    var validationResult = await validator.ValidateAsync(data);
 
-            await documentContainer.CreateItemAsync(item, new Microsoft.Azure.Cosmos.PartitionKey(item.Category));
-            string responsemessage="Created an item successfully";
-            dynamic cmydata = new ExpandoObject();
-            cmydata.message = responsemessage;
-            cmydata.Data=item;
-            string json = Newtonsoft.Json.JsonConvert.SerializeObject(cmydata);
-            return new OkObjectResult(json);
-        }
+    if (!validationResult.IsValid)
+    {
+        return new BadRequestObjectResult(validationResult.Errors);
+    }
+
+    var item = new ShoppingCartItem
+    {
+        ItemName = data.ItemName,
+        Category = data.Category
+    };
+
+    await documentContainer.CreateItemAsync(item, new Microsoft.Azure.Cosmos.PartitionKey(item.Category));
+    string responsemessage = "Created an item successfully";
+    dynamic cmydata = new ExpandoObject();
+    cmydata.message = responsemessage;
+    cmydata.Data = item;
+    string json = Newtonsoft.Json.JsonConvert.SerializeObject(cmydata);
+    return new OkObjectResult(json);
+}
 
         [FunctionName("UpdateShoppingCartItem")]
         public async Task<IActionResult> UpdateShoppingCartItems(
             [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "updateshoppingcartitem/{id}/{category}")] HttpRequest req,
             ILogger log, string id,string category)
         {
+        
             log.LogInformation($"Updating Shopping Cart Item with ID: {id}");
 
             string requestData = await new StreamReader(req.Body).ReadToEndAsync();
             var data = JsonConvert.DeserializeObject<UpdateShoppingCartItem>(requestData);
             var item = await documentContainer.ReadItemAsync<ShoppingCartItem>(id, new Microsoft.Azure.Cosmos.PartitionKey(category));
-
             if (item.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 string responseMessage="There is no item with the mentioned id";

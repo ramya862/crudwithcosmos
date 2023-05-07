@@ -1,3 +1,4 @@
+using FluentValidation.AspNetCore;
 using Microsoft.Azure.Cosmos.Fluent;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -17,8 +18,15 @@ namespace ShoppingCartList
             .AddEnvironmentVariables()
             .Build();
 
+        [Obsolete]
         public override void Configure(IFunctionsHostBuilder builder)
         {
+            builder.Services.AddFluentValidation(cfg =>
+            {
+                cfg.RegisterValidatorsFromAssemblyContaining<CreateShoppingCartItemValidator>();
+            });
+
+           
             builder.Services.AddSingleton(s =>
             {
                 var connectionString = Configuration["CosmosDBConnectionString"];
